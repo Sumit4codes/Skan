@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Skan - Document Scanner</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #f0f0f0;
+        }
+        h1 {
+            color: #333;
+            margin: 20px 0;
+            text-align: center;
+            width: 100%;
+        }
+        #camera, #preview {
+            width: 100%;
+            max-width: 500px;
+            height: auto;
+            object-fit: cover;
+            margin-bottom: 20px;
+        }
+        .button-container {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        button {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            text-align: center;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+        button svg {
+            margin-right: 8px;
+        }
+        #scanButton {
+            background-color: #008CBA;
+        }
+        #switchCameraButton {
+            background-color: #f44336;
+        }
+        #capturedImages {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background-color: rgba(255, 255, 255, 0.9);
+            padding: 10px;
+            display: flex;
+            overflow-x: auto;
+            gap: 10px;
+            transition: transform 0.3s ease-in-out;
+            transform: translateY(100%);
+        }
+
+        #capturedImages.visible {
+            transform: translateY(0);
+        }
+
+        .capturedImage {
+            width: 60px;
+            height: 60px;
+            object-fit: cover;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        #imagePreview {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            display: none;
+        }
+
+        #imagePreview img {
+            max-width: 90%;
+            max-height: 90%;
+            object-fit: contain;
+        }
+
+        #imagePreview .close-button {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            color: white;
+            font-size: 30px;
+            cursor: pointer;
+            background: rgba(0, 0, 0, 0.5);
+            width: 40px;
+            height: 40px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border-radius: 50%;
+        }
+    </style>
+</head>
+<body>
+    <h1>Skan</h1>
+    <video id="camera" autoplay playsinline></video>
+    <canvas id="preview" style="display: none;"></canvas>
+    <div class="button-container">
+        <button id="captureButton">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <circle cx="12" cy="12" r="3"/>
+            </svg>
+            Capture
+        </button>
+        <button id="switchCameraButton">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M23 4v6h-6"/>
+                <path d="M1 20v-6h6"/>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+            </svg>
+            Switch
+        </button>
+        <button id="scanButton" style="display: none;">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 7V4h16v3"/>
+                <path d="M4 20v-3h16v3"/>
+                <path d="M4 12h16"/>
+            </svg>
+            Scan
+        </button>
+    </div>
+    <div id="capturedImages"></div>
+    <div id="imagePreview">
+        <img src="" alt="Preview">
+        <div class="close-button">&times;</div>
+    </div>
+
+    <script>
+        const camera = document.getElementById('camera');
+        const preview = document.getElementById('preview');
+        const captureButton = document.getElementById('captureButton');
+        const switchCameraButton = document.getElementById('switchCameraButton');
+        const scanButton = document.getElementById('scanButton');
+        const capturedImagesContainer = document.getElementById('capturedImages');
+        let imageCapture;
+        let currentFacingMode = 'environment';
+        let capturedImages = [];
+
+        async function startCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        facingMode: currentFacingMode
+                    } 
+                });
+                camera.srcObject = stream;
+                const track = stream.getVideoTracks()[0];
+                imageCapture = new ImageCapture(track);
+            } catch (error) {
+                console.error('Error accessing camera:', error);
+            }
+        }
+
+        async function switchCamera() {
+            if (camera.srcObject) {
+                camera.srcObject.getTracks().forEach(track => track.stop());
+            }
+            currentFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
+            await startCamera();
+        }
+
+        function displayCapturedImage(imageBlob) {
+            const img = document.createElement('img');
+            img.src = URL.createObjectURL(imageBlob);
+            img.className = 'capturedImage';
+            img.alt = 'Captured document';
+            img.addEventListener('click', () => showImagePreview(img.src));
+            capturedImagesContainer.appendChild(img);
+            showGallery();
+        }
+
+        captureButton.addEventListener('click', async () => {
+            try {
+                const blob = await imageCapture.takePhoto();
+                capturedImages.push(blob);
+                displayCapturedImage(blob);
+                if (capturedImages.length > 0) {
+                    scanButton.style.display = 'flex';
+                }
+            } catch (error) {
+                console.error('Error capturing image:', error);
+            }
+        });
+
+        switchCameraButton.addEventListener('click', switchCamera);
+
+        scanButton.addEventListener('click', async () => {
+            try {
+                const formData = new FormData();
+                capturedImages.forEach((blob, index) => {
+                    formData.append('file' + index, blob, 'document' + index + '.jpg');
+                });
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.style.display = 'none';
+                    a.href = url;
+                    a.download = 'scanned_documents.pdf';
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    // Reset the UI
+                    capturedImages = [];
+                    capturedImagesContainer.innerHTML = '';
+                    scanButton.style.display = 'none';
+                    hideGallery();
+                } else {
+                    console.error('Error uploading images:', response.statusText);
+                }
+            } catch (error) {
+                console.error('Error scanning documents:', error);
+            }
+        });
+
+        function showGallery() {
+            const gallery = document.getElementById('capturedImages');
+            gallery.classList.add('visible');
+        }
+
+        function hideGallery() {
+            const gallery = document.getElementById('capturedImages');
+            gallery.classList.remove('visible');
+        }
+
+        function showImagePreview(src) {
+            const preview = document.getElementById('imagePreview');
+            const previewImg = preview.querySelector('img');
+            previewImg.src = src;
+            preview.style.display = 'flex';
+        }
+
+        document.getElementById('imagePreview').addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) {
+                e.currentTarget.style.display = 'none';
+            }
+        });
+
+        document.querySelector('#imagePreview .close-button').addEventListener('click', () => {
+            document.getElementById('imagePreview').style.display = 'none';
+        });
+
+        startCamera();
+    </script>
+</body>
+</html>
+
